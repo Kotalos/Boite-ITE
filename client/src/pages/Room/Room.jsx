@@ -4,36 +4,46 @@ import BoxCard from "../../components/shared/BoxCard/BoxCard";
 
 import styles from "./Room.module.scss";
 
+import { ReactComponent as Delete } from "../../assets/icons/Delete.svg";
 import { ReactComponent as Arrow } from "../../assets/icons/Arrow.svg";
+import { ReactComponent as Check } from "../../assets/icons/Success.svg";
 
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import CategorySelector from "../../components/shared/CategorySelector/CategorySelector";
 import LineChart from "../../components/shared/Chart/LineChart";
 import Switch from "../../components/shared/Switch/Switch";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import api from "../../services/api";
 
 import moment from "moment";
+import refreshContext from "../../contexts/refreshContext";
+import notificationContext from "../../contexts/notificationContext";
+import { useForm } from "react-hook-form";
 
 const Room = () => {
   const { uuid } = useParams();
+  const navigate = useNavigate();
+
   const [sampling, setSampling] = useState(false);
   const [category, setCategory] = useState({});
   const [roomData, setRoomData] = useState(null);
   const [isTouched, setIsTouched] = useState(false);
 
-  const [boxes, setBoxes] = useState([]);
+  const [timeChanged, setTimeChanged] = useState(false);
+
+  const [boxList, setBoxList] = useState([]);
   const [data, setData] = useState(null);
   const [last, setLast] = useState(null);
 
+  const [categories, setCategories] = useState([]);
+  const [selectedBox, setSelectedBox] = useState(null);
+
   const onlyNumbers = (e) => {
+    !timeChanged && setTimeChanged(true);
     e.target.value = e.target.value
       .replace(/[^0-9.]/g, "")
       .replace(/(\..*?)\..*/g, "$1");
   };
-
-  const [categories, setCategories] = useState([]);
-  const [selectedBox, setSelectedBox] = useState(null);
 
   useEffect(() => {
     api.get("/data-type/all/").then((res) => {
@@ -45,10 +55,10 @@ const Room = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
     api.get(`/room/${uuid}/`).then((res) => {
+      setBoxList(res.data.boxes);
       setRoomData(res.data);
-      setBoxes(res.data.boxes);
     });
-  }, [uuid]);
+  }, []);
 
   useEffect(() => {
     roomData && setSampling(roomData.state);
@@ -61,16 +71,16 @@ const Room = () => {
   }, [sampling]);
 
   useEffect(() => {
-    selectedBox &&
+    if (selectedBox) {
       api.get(`/data/get/${selectedBox}/today/`).then((res) => {
         setData(res.data);
       });
 
-    selectedBox &&
-      api.get(`/data/get/${selectedBox}/latest/`).then((res) => {
-        console.log(res.data);
-        setLast(res.data);
-      });
+      selectedBox &&
+        api.get(`/data/get/${selectedBox}/latest/`).then((res) => {
+          setLast(res.data);
+        });
+    }
   }, [selectedBox]);
 
   const [chartData, setChartData] = useState({
@@ -141,43 +151,113 @@ const Room = () => {
     return arr.reduce((a, b) => parseInt(a) + parseInt(b), 0) / arr.length;
   };
 
+  const { refresh, setRefresh } = useContext(refreshContext);
+  const { setNotification } = useContext(notificationContext);
+
+  const handleDelete = () => {
+    if (uuid) {
+      if (
+        window.confirm(
+          "Êtes-vous sûr de vouloir supprimer cette pièce ? Cela entrainera l'oubli des boîtes qui y sont assignées"
+        )
+      ) {
+        api
+          .delete(`/room/${uuid}/delete/`)
+          .then((res) => {
+            res.status === 200 && setRefresh(!refresh);
+            navigate("/rooms");
+          })
+          .then((res) => {
+            res.status === 200 && navigate("/devices");
+            res.status === 200 &&
+              setNotification({
+                show: true,
+                type: "success",
+                text: "Salle supprimée avec succès !",
+              });
+          })
+          .catch(() => {
+            setNotification({
+              show: true,
+              type: "error",
+              text: "Une erreur est survenue",
+            });
+          });
+      }
+    }
+  };
+
+  const { register, handleSubmit, getValues } = useForm();
+
+  const onSubmit = () => {
+    if (selectedBox) {
+      let hours = parseInt(getValues("hours"));
+      let minutes = parseInt(getValues("minutes"));
+      let seconds = parseInt(getValues("seconds"));
+
+      let hoursInSec = hours * 3600;
+      let minutesInSec = minutes * 60;
+
+      let totalInMilliseconds = (hoursInSec + minutesInSec + seconds) * 1000;
+
+      api.patch(`/box/update/${selectedBox}/`, {
+        collect_frequency: totalInMilliseconds,
+      });
+      setTimeChanged(false);
+    }
+  };
+
   return (
     <main>
-      <div className={`row ${styles.headRow}`}>
-        <div className={`row ${styles.topRow}`}>
-          <div
-            className={styles.color}
-            style={{
-              "--color": roomData ? roomData.color : "#000",
-            }}
-          ></div>
-          <h2 className="pageTitle">{roomData && roomData.name}</h2>
+      <header className={styles.pageHead}>
+        <div className={`row ${styles.headRow}`}>
+          <div className={`row ${styles.topRow}`}>
+            <div
+              className={styles.color}
+              style={{
+                "--color": roomData ? roomData.color : "#000",
+              }}
+            ></div>
+            <h2 className="pageTitle">{roomData && roomData.name}</h2>
+          </div>
+          <Switch
+            styling="bigSwitch"
+            touched={isTouched}
+            setTouched={setIsTouched}
+            state={sampling}
+            setState={setSampling}
+          />
         </div>
-        <Switch
-          styling="bigSwitch"
-          touched={isTouched}
-          setTouched={setIsTouched}
-          state={sampling}
-          setState={setSampling}
+        <div className={styles.delete} onClick={handleDelete}>
+          <Delete />
+        </div>
+      </header>
+      {boxList.length > 0 ? (
+        <section className="section">
+          <h2 className="sectionTitle">Sélectionnez une boite</h2>
+          <div className={`row wrap ${styles.row}`}>
+            {boxList.map((box, index) => {
+              return (
+                <BoxCard
+                  key={index}
+                  uuid={box.uuid}
+                  macAddress={box.mac}
+                  name={box.name}
+                  type="selection"
+                  selectedBox={selectedBox}
+                  setSelectedBox={setSelectedBox}
+                />
+              );
+            })}
+          </div>
+        </section>
+      ) : (
+        <InfoMessage
+          type="warning"
+          title="Aucune boite n'est assignée à cette pièce"
+          message='Vous pouvez en assigner une dans la section "pièce" de l&apos;application'
         />
-      </div>
-
-      <section className="section">
-        <h2 className="sectionTitle">Sélectionnez une boite</h2>
-        {boxes.length > 0 &&
-          boxes.map((box) => {
-            return (
-              <BoxCard
-                key={box.uuid}
-                type="selection"
-                uuid={box.uuid}
-                box={selectedBox}
-                setBox={setSelectedBox}
-                name={box.name}
-              />
-            );
-          })}
-      </section>
+      )}
       {selectedBox && (
         <div className="reveal">
           <section className="section">
@@ -208,32 +288,75 @@ const Room = () => {
           <section>
             <h2 className="sectionTitle">Relevés</h2>
 
-            <div className="form-group">
+            <form onSubmit={handleSubmit(onSubmit)} className="form-group">
               <label className="label">Intervale de relevés</label>
-              <div className="input timeInput">
-                <input
-                  type="text"
-                  defaultValue="0"
-                  onChange={(e) => onlyNumbers(e)}
-                  maxLength={2}
-                />
-                <span>h</span>
-                <input
-                  type="text"
-                  defaultValue="30"
-                  maxLength={2}
-                  onChange={(e) => onlyNumbers(e)}
-                />
-                <span>min</span>
-                <input
-                  type="text"
-                  defaultValue="0"
-                  maxLength={2}
-                  onChange={(e) => onlyNumbers(e)}
-                />
-                <span>sec</span>
+              <div className={styles.intervalRow}>
+                <div className="input timeInput">
+                  <input
+                    {...register("hours")}
+                    type="text"
+                    defaultValue={
+                      boxList.find((box) => box.uuid === selectedBox) &&
+                      boxList.find((box) => box.uuid === selectedBox)
+                        .collect_frequency &&
+                      Math.floor(
+                        (boxList.find((box) => box.uuid === selectedBox)
+                          .collect_frequency /
+                          (1000 * 60 * 60)) %
+                          24
+                      )
+                    }
+                    onChange={(e) => onlyNumbers(e)}
+                    maxLength={2}
+                  />
+                  <span>h</span>
+                  <input
+                    {...register("minutes")}
+                    type="text"
+                    defaultValue={
+                      boxList.find((box) => box.uuid === selectedBox) &&
+                      boxList.find((box) => box.uuid === selectedBox)
+                        .collect_frequency &&
+                      Math.floor(
+                        (boxList.find((box) => box.uuid === selectedBox)
+                          .collect_frequency /
+                          (1000 * 60)) %
+                          60
+                      )
+                    }
+                    maxLength={2}
+                    onChange={(e) => onlyNumbers(e)}
+                  />
+                  <span>min</span>
+                  <input
+                    {...register("seconds")}
+                    type="text"
+                    defaultValue={
+                      boxList.find((box) => box.uuid === selectedBox) &&
+                      boxList.find((box) => box.uuid === selectedBox)
+                        .collect_frequency &&
+                      Math.floor(
+                        (boxList.find((box) => box.uuid === selectedBox)
+                          .collect_frequency /
+                          1000) %
+                          60
+                      )
+                    }
+                    maxLength={2}
+                    onChange={(e) => onlyNumbers(e)}
+                  />
+                  <span>sec</span>
+                </div>
+                {timeChanged && (
+                  <button
+                    type="submit"
+                    className={`${styles.intervalBtn} reveal`}
+                  >
+                    <Check />
+                  </button>
+                )}
               </div>
-            </div>
+            </form>
             <div className="list">
               <DataCard
                 type="plain"
@@ -350,183 +473,6 @@ const Room = () => {
                 </article>
               )}
             </section>
-            {/*category === 4 && (
-              <article className={`${styles.data} reveal`}>
-                <DataCard title="Dernière humidité relevée" value="26%" />
-
-                <article className={styles.tracking}>
-                  <header className={styles.header}>
-                    <h2>Humidité %</h2>
-                    <div className={styles.dateSelector}>
-                      <Arrow className={styles.previous} />
-                      <span className={styles.day}>Aujourd'hui</span>
-                      <Arrow className={styles.next} />
-                    </div>
-                  </header>
-                  <div className="list">
-                    <DataCard
-                      type="minTemp"
-                      title="Humidité minimale"
-                      value={Math.min(...selectedValues) + " %"}
-                    />
-                    <DataCard
-                      type="temperature"
-                      title="Humidité moyenne"
-                      value={average(selectedValues).toFixed(1) + " %"}
-                    />
-                    <DataCard
-                      type="maxTemp"
-                      title="Humidité maximale"
-                      value={Math.max(...selectedValues) + " %"}
-                    />
-                    <div className={styles.chart}>
-                      <LineChart
-                        chartData={chartData}
-                        min={Math.min(...selectedValues) - 2}
-                        max={Math.max(...selectedValues) + 2}
-                      />
-                    </div>
-                  </div>
-                </article>
-              </article>
-            )}
-            {category === "pression" && (
-              <article className={`${styles.data} reveal`}>
-                <DataCard title="Dernière pression relevée" value="994 hPa" />
-
-                <article className={styles.tracking}>
-                  <header className={styles.header}>
-                    <h2>Pression hPa</h2>
-                    <div className={styles.dateSelector}>
-                      <Arrow className={styles.previous} />
-                      <span className={styles.day}>Aujourd'hui</span>
-                      <Arrow className={styles.next} />
-                    </div>
-                  </header>
-                  <div className="list">
-                    <DataCard
-                      type="minTemp"
-                      title="Pression minimale"
-                      value="968 hPa"
-                    />
-                    <DataCard
-                      type="temperature"
-                      title="Pression moyenne"
-                      value="1003 hPa"
-                    />
-                    <DataCard
-                      type="maxTemp"
-                      title="Pression maximale"
-                      value="1100 hPa"
-                    />
-                    <div className={styles.chart}>
-                      <LineChart chartData={chartData} min={0} max={35} />
-                    </div>
-                  </div>
-                </article>
-              </article>
-            )}
-            {category === "sound-level" && (
-              <article className={`${styles.data} reveal`}>
-                <DataCard title="Dernier volume relevé" value="60 dB" />
-
-                <article className={styles.tracking}>
-                  <header className={styles.header}>
-                    <h2>Niveau sonore dB</h2>
-                    <div className={styles.dateSelector}>
-                      <Arrow className={styles.previous} />
-                      <span className={styles.day}>Aujourd'hui</span>
-                      <Arrow className={styles.next} />
-                    </div>
-                  </header>
-                  <div className="list">
-                    <DataCard
-                      type="minTemp"
-                      title="Niveau minimal"
-                      value="19 dB"
-                    />
-                    <DataCard
-                      type="temperature"
-                      title="Niveau moyen"
-                      value="43 dB"
-                    />
-                    <DataCard
-                      type="maxTemp"
-                      title="Niveau maximal"
-                      value="72 dB"
-                    />
-                    <div className={styles.chart}>
-                      <LineChart chartData={chartData} min={0} max={35} />
-                    </div>
-                  </div>
-                </article>
-              </article>
-            )}
-            {category === "lightning" && (
-              <article className={`${styles.data} reveal`}>
-                <DataCard title="Dernière luminosté relevée" value="1024 lux" />
-
-                <article className={styles.tracking}>
-                  <header className={styles.header}>
-                    <h2>Luminosité lux</h2>
-                    <div className={styles.dateSelector}>
-                      <Arrow className={styles.previous} />
-                      <span className={styles.day}>Aujourd'hui</span>
-                      <Arrow className={styles.next} />
-                    </div>
-                  </header>
-                  <div className="list">
-                    <DataCard
-                      type="minTemp"
-                      title="Luminosité minimale"
-                      value="12 lux"
-                    />
-                    <DataCard
-                      type="temperature"
-                      title="Luminosité moyenne"
-                      value="853 lux"
-                    />
-                    <DataCard
-                      type="maxTemp"
-                      title="Luminosité maximale"
-                      value="2807 lux"
-                    />
-                    <div className={styles.chart}>
-                      <LineChart chartData={chartData} min={0} max={35} />
-                    </div>
-                  </div>
-                </article>
-              </article>
-            )}
-            {category === "gas" && (
-              <article className={`${styles.data} reveal`}>
-                <DataCard title="Dernier taux de CO2 relevé" value="17%" />
-
-                
-                <article className={styles.tracking}>
-                  <header className={styles.header}>
-                    <h2>Taux de CO2 %</h2>
-                    <div className={styles.dateSelector}>
-                      <Arrow className={styles.previous} />
-                      <span className={styles.day}>Aujourd'hui</span>
-                      <Arrow className={styles.next} />
-                    </div>
-                  </header>
-                  <div className="list">
-                    <DataCard type="minTemp" title="Taux minimal" value="9%" />
-                    <DataCard
-                      type="temperature"
-                      title="Taux moyen"
-                      value="16%"
-                    />
-                    <DataCard type="maxTemp" title="Taux maximal" value="40%" />
-                    <div className={styles.chart}>
-                      <LineChart chartData={chartData} min={0} max={35} />
-                    </div>
-                  </div>
-                </article>
-              </article>
-            )*/}
           </section>
         </div>
       )}

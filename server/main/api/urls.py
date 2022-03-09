@@ -1,3 +1,4 @@
+from unicodedata import name
 from django.urls import include, path
 from rest_framework import routers
 from . import views
@@ -34,13 +35,22 @@ urlpatterns = [
     path("building/<str:uuid>/", views.buildingDetail, name='building_detail'),
     path("building/update/<str:uuid>/",
          views.buildingUpdate, name='building_update'),
+    path("building/<str:uuid>/delete/",
+         views.buildingDelete, name='building_delete'),
 
     #! -- ROOMS ---
 
     path("rooms/", views.roomList, name='room_list'),
     path("room/create/", views.roomCreate, name='room_create'),
     path("room/<str:uuid>/", views.roomDetail, name='room_detail'),
+<<<<<<< HEAD
     path("room/update/<str:uuid>/", views.roomUpdate, name='room_update'),
+=======
+    path("room/update/<str:uuid>/",
+         views.roomUpdate, name='room_update'),
+    path("room/<str:uuid>/delete/",
+         views.roomDelete, name='room_delete'),
+>>>>>>> 066b334c87ed91ff975be0cfae915cb27e7ca8be
 
     #! -- DATA TYPES --
 
@@ -59,5 +69,12 @@ urlpatterns = [
     path("data/get/<str:box_uuid>/latest/",
          views.dataGetLatest, name="data_get_latest"),
     path("data/get/<str:box_uuid>/today/",
-         views.dataGetToday, name="data_get_today")
+         views.dataGetToday, name="data_get_today"),
+
+
+    #! -- MISC --
+    path("ipAddress/", views.getIpAddress, name="get_ip_address"),
+
+    #! -- TEST ---
+    path("test/", views.test, name="test_mqtt")
 ]

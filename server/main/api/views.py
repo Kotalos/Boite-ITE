@@ -1,5 +1,5 @@
 
-from rest_framework import viewsets
+from rest_framework import status
 from rest_framework.decorators import api_view
 
 from rest_framework.response import Response
@@ -9,6 +9,10 @@ from rest_framework.mixins import UpdateModelMixin
 from .serializers import *
 from .models import *
 
+
+import json
+
+import socket
 # Create your views here.
 from paho.mqtt import publish
 import json
@@ -57,7 +61,9 @@ def boxDetail(request, uuid):
 
 @api_view(["POST"])
 def boxCreate(request):
-    serializer = BoxSerializer(data=request.data)
+
+    data = json.loads(request.data.__getitem__("data"))
+    serializer = BoxSerializer(data=data)
 
     if serializer.is_valid():
         serializer.save()
@@ -169,7 +175,34 @@ def buildingUpdate(request, uuid):
     return Response(serializer.errors)
 
 
-#! --- BUILDINGS ---
+@api_view(["DELETE"])
+def buildingDelete(request, uuid):
+
+    try:
+        building = Building.objects.get(uuid=uuid)
+        rooms = Room.objects.filter(building=uuid)
+    except:
+        return Response("Une erreur est survenue", status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        for room in rooms:
+            boxes = Box.objects.filter(room=room)
+            for box in boxes:
+                dataToPass = {"room": None, "name": None}
+                serializer = BoxSerializer(
+                    instance=box, data=dataToPass, partial=True)
+
+                if serializer.is_valid():
+                    serializer.save()
+
+        building.delete()
+        return Response("Batiment supprimé avec succès")
+
+    except:
+        return Response("Une erreur est survenue", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+#! --- ROOMS ---
 
 @api_view(["GET"])
 def roomList(request):
@@ -193,11 +226,28 @@ def roomDetail(request, uuid):
 @api_view(["POST"])
 def roomCreate(request):
 
+    roomData = request.data.copy()
+
+    if "boxes" in roomData:
+        del roomData["boxes"]
+
     serializer = RoomSerializer(
-        data=request.data)
+        data=roomData)
 
     if serializer.is_valid():
         serializer.save()
+
+        try:
+            data = request.data
+
+            if data["boxes"]:
+                for box_uuid in data["boxes"]:
+                    box = Box.objects.get(uuid=box_uuid)
+
+                    box.room_id = serializer.data["uuid"]
+                    box.save()
+        except:
+            pass
 
     return Response(serializer.data)
 
@@ -232,10 +282,36 @@ def roomUpdate(request, uuid):
     return Response(serializer.errors)
 
 
+@api_view(["DELETE"])
+def roomDelete(request, uuid):
+
+    try:
+        room = Room.objects.get(uuid=uuid)
+    except:
+        return Response("Une erreur est survenue", status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+
+        boxes = Box.objects.filter(room=room)
+        for box in boxes:
+            dataToPass = {"room": None, "name": None}
+            serializer = BoxSerializer(
+                instance=box, data=dataToPass, partial=True)
+
+            if serializer.is_valid():
+                serializer.save()
+
+        room.delete()
+        return Response("Pièce supprimée avec succès")
+
+    except:
+        return Response("Une erreur est survenue", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 #! -- DATA TYPES --
 
 
-@api_view(["POST"])
+@ api_view(["POST"])
 def dataTypeCreate(request):
 
     serializer = DataTypeSerializer(
@@ -247,7 +323,7 @@ def dataTypeCreate(request):
     return Response(serializer.data)
 
 
-@api_view(["GET"])
+@ api_view(["GET"])
 def dataTypeAll(request):
 
     dataTypes = DataType.objects.all()
@@ -257,7 +333,7 @@ def dataTypeAll(request):
     return Response(serializer.data)
 
 
-@api_view(["GET"])
+@ api_view(["GET"])
 def dataTypeDetails(request, name):
 
     dataType = DataType.objects.get(name=name)
@@ -267,7 +343,7 @@ def dataTypeDetails(request, name):
     return Response(serializer.data)
 
 
-@api_view(["PATCH"])
+@ api_view(["PATCH"])
 def dataTypeUpdate(request, name):
     dataType = DataType.objects.get(name=name)
 
@@ -281,7 +357,7 @@ def dataTypeUpdate(request, name):
     return Response(serializer.errors)
 
 
-@api_view(["DELETE"])
+@ api_view(["DELETE"])
 def dataTypeDelete(request, name):
     dataType = DataType.objects.get(name=name)
     dataType.delete()
@@ -291,14 +367,13 @@ def dataTypeDelete(request, name):
 #! -- DATA --
 
 
-@api_view(["POST"])
+@ api_view(["POST"])
 def dataCreate(request):
 
-    data = request.data
-
+    data = json.loads(request.data.__getitem__("data"))
     box = Box.objects.get(mac=data["mac"])
 
-    if data["battery"]:
+    if "battery" in data:
 
         try:
             dataType = DataType.objects.get(name="battery")
@@ -336,35 +411,32 @@ def dataCreate(request):
 
             if serializer.is_valid():
                 serializer.save()
-            else:
-                print(serializer.errors)
+
         except:
             pass
 
-        for error in data["errors"].items():
-            erroType = error[0]
-            errorValue = error[1]
+    for error in data["errors"].items():
+        erroType = error[0]
+        errorValue = error[1]
 
-            try:
-                dataType = DataType.objects.get(name=erroType)
+        try:
+            dataType = DataType.objects.get(name=erroType)
 
-                dataToPass = {"box": box.uuid, "data_type": dataType.id,
-                              "value": errorValue, "isError": True}
+            dataToPass = {"box": box.uuid, "data_type": dataType.id,
+                          "value": errorValue, "isError": True}
 
-                serializer = DataSerializer(
-                    data=dataToPass)
+            serializer = DataSerializer(
+                data=dataToPass)
 
-                if serializer.is_valid():
-                    serializer.save()
-                else:
-                    print(serializer.errors)
-            except:
-                pass
+            if serializer.is_valid():
+                serializer.save()
+        except:
+            pass
 
     return Response(data)
 
 
-@api_view(["GET"])
+@ api_view(["GET"])
 def dataGetToday(request, box_uuid):
 
     today = datetime.today().date()
@@ -376,7 +448,7 @@ def dataGetToday(request, box_uuid):
     return Response(serializer.data)
 
 
-@api_view(["GET"])
+@ api_view(["GET"])
 def dataGetLatest(request, box_uuid):
 
     today = datetime.today().date()
@@ -397,7 +469,7 @@ def dataGetLatest(request, box_uuid):
     return Response(serializer.data)
 
 
-@api_view(["GET"])
+@ api_view(["GET"])
 def dataTotalToday(request):
 
     today = datetime.today().date()
@@ -413,7 +485,19 @@ def dataTotalToday(request):
     dataSerialized = DataSerializer(
         data, many=True)
 
-    count = len(dataSerialized.data) / len(dataTypesSerialized.data)
-    print(count)
+    count = len(dataSerialized.data)
 
     return Response(count)
+
+
+@ api_view(["GET"])
+def getIpAddress(request):
+    hostname = socket.gethostname()
+    ip_address = socket.gethostbyname(hostname)
+    return Response(ip_address)
+
+
+@ api_view(["POST"])
+def test(request):
+    print(request.data)
+    return Response(request.data)
