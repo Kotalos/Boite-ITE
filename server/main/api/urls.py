@@ -40,8 +40,7 @@ urlpatterns = [
     path("rooms/", views.roomList, name='room_list'),
     path("room/create/", views.roomCreate, name='room_create'),
     path("room/<str:uuid>/", views.roomDetail, name='room_detail'),
-    path("room/update/<str:uuid>/",
-         views.roomUpdate, name='room_update'),
+    path("room/update/<str:uuid>/", views.roomUpdate, name='room_update'),
 
     #! -- DATA TYPES --
 

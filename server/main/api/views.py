@@ -10,7 +10,8 @@ from .serializers import *
 from .models import *
 
 # Create your views here.
-
+from paho.mqtt import publish
+import json
 
 #! --- BOXES ---
 
@@ -205,12 +206,27 @@ def roomCreate(request):
 def roomUpdate(request, uuid):
 
     room = Room.objects.get(uuid=uuid)
+    boxes = Box.objects.filter(room=uuid)
+    currentState = room.state
 
-    serializer = RoomSerializer(
-        instance=room, data=request.data, partial=True)
+    serializer = RoomSerializer(instance=room, data=request.data, partial=True)
 
     if serializer.is_valid():
         serializer.save()
+
+        if not (request.data['state'] == currentState):
+            print('printe ', serializer.data)
+            
+            bx = []
+            for box in boxes:
+                bx.append(box.mac)
+
+            publish.single("/notamment", payload=json.dumps({
+                "boxes":bx,
+                "state":room.state,
+                "collect_frequency":room.collect_frequency,
+                }), auth={'username':'kotalos', 'password':'12345'}, hostname="localhost")
+
         return Response(serializer.data)
 
     return Response(serializer.errors)
