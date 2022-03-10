@@ -31,7 +31,7 @@ class Building(models.Model):
 class Room(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     building = models.ForeignKey(
-        Building, related_name='rooms', on_delete=models.CASCADE)
+    Building, related_name='rooms', on_delete=models.CASCADE)
     name = models.CharField(max_length=32, unique=True)
     state = models.BooleanField(default=True)
     color = models.CharField(max_length=16)
@@ -46,7 +46,7 @@ class Box(models.Model):
                              null=True, on_delete=models.DO_NOTHING)
 
     name = models.CharField(max_length=32, null=True)
-    battery = models.IntegerField(default=0)
+    battery = models.IntegerField(default=100)
     sampling = models.BooleanField(default=True)
     last_ping = models.DateTimeField(default=datetime.now, null=True)
     next_ping = models.DateTimeField(default=datetime.now, null=True)
@@ -68,7 +68,7 @@ class DataType(models.Model):
 
 class Data(models.Model):
     data_type = models.ForeignKey(DataType, on_delete=models.CASCADE)
-    box = models.ForeignKey(Box, null=True, on_delete=models.CASCADE)
+    #box = models.ForeignKey(Box, null=True, on_delete=models.CASCADE)
 
     value = models.CharField(max_length=32)
     isError = models.BooleanField(default=False)

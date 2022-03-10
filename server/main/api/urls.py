@@ -43,14 +43,8 @@ urlpatterns = [
     path("rooms/", views.roomList, name='room_list'),
     path("room/create/", views.roomCreate, name='room_create'),
     path("room/<str:uuid>/", views.roomDetail, name='room_detail'),
-<<<<<<< HEAD
     path("room/update/<str:uuid>/", views.roomUpdate, name='room_update'),
-=======
-    path("room/update/<str:uuid>/",
-         views.roomUpdate, name='room_update'),
-    path("room/<str:uuid>/delete/",
-         views.roomDelete, name='room_delete'),
->>>>>>> 066b334c87ed91ff975be0cfae915cb27e7ca8be
+    path("room/<str:uuid>/delete/", views.roomDelete, name='room_delete'),
 
     #! -- DATA TYPES --
 
